@@ -35,7 +35,14 @@ flowchart LR
 
 #### Action
 
-The action is the work to execute. It may receive input, produce output, do both, or do neither.
+The action is supplied as a parameter to the Trier, using a callable with one of four input and output shapes:
+
+- **Function:** receives input and produces output.
+- **Consumer:** receives input without producing output.
+- **Supplier:** produces output without receiving input.
+- **Runnable:** neither receives input nor produces output.
+
+The caller passes the executable behavior directly, such as a lambda or a reference to an existing function or method. No Trier subclass or inherited action implementation is required.
 
 When it succeeds, the Trier returns its result or simply completes. When it throws an exception, the Trier applies the configured failure-handling rules.
 
