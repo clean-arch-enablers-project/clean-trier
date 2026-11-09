@@ -44,7 +44,7 @@ The action is supplied as a parameter to the Trier, using a callable with one of
 
 The caller passes the executable behavior directly, such as a lambda or a reference to an existing function or method. No Trier subclass or inherited action implementation is required.
 
-When it succeeds, the Trier returns its result or simply completes. When it throws an exception, the Trier applies the configured failure-handling rules.
+When the supplied action succeeds, the Trier returns the action's result or simply completes. When the action throws an exception, the Trier applies the configured failure-handling rules.
 
 <br>
 
@@ -64,7 +64,7 @@ Here, unexpected means unmapped. A foreseeable technical failure, such as a time
 
 A retry executes the **same action again** after a matching failure.
 
-A retry policy defines:
+The Trier's retry policy defines:
 
 - The failures eligible for retry
 - The maximum number of additional attempts
@@ -72,7 +72,7 @@ A retry policy defines:
 
 Three retries allow up to four attempts: the initial execution and three additional executions. Delays may increase between attempts, such as through exponential backoff.
 
-Each invocation has its own retry accounting. Repeating the action must also be acceptable for its possible side effects, including when an earlier attempt partially succeeded.
+Each Trier invocation tracks its own retry attempts. Repeating the action must also be acceptable for its possible side effects, including when an earlier attempt partially succeeded.
 
 <br>
 
@@ -80,7 +80,7 @@ Each invocation has its own retry accounting. Repeating the action must also be 
 
 Exhaustion is the outcome of a retry policy permitting no further attempts after a failure.
 
-An exhaustion handler receives the triggering exception and retry context, and produces a [mapped exception](https://github.com/clean-arch-enablers-project/clean-mapped-exceptions/blob/feature/hello-world/concept/README.md) describing that outcome. It defines how exhaustion is reported; it does not recover a result.
+An exhaustion handler receives the triggering exception and retry context, and produces a [mapped exception](https://github.com/clean-arch-enablers-project/clean-mapped-exceptions/blob/feature/hello-world/concept/README.md) describing that outcome. The exhaustion handler defines how retry exhaustion is reported; it does not recover a result.
 
 If a fallback is configured, it is attempted before exhaustion is reported. Without a fallback, the Trier uses the custom exhaustion handler or a default mapped exhaustion exception.
 
@@ -92,7 +92,7 @@ A failure with no matching retry policy is handled directly; it is not retry exh
 
 A fallback executes a **different action** to provide an acceptable outcome after the original action fails.
 
-It runs when no retry policy applies or when the applicable retries are exhausted. A successful fallback supplies the result returned by the Trier.
+The fallback runs when no retry policy applies or when the applicable retries are exhausted. A successful fallback supplies the result returned by the Trier.
 
 For example, a cache lookup can replace a failed remote retrieval when the workflow accepts potentially older information.
 
@@ -131,7 +131,7 @@ flowchart TD
     classDef default fill:#000000,stroke:#ffffff,color:#ffffff
 ```
 
-These semantics are intended to be reusable across workflows, programming languages, and application frameworks.
+The Trier's retry, fallback, exhaustion, and exception-mapping semantics are intended to be reusable across workflows, programming languages, and application frameworks.
 
 <br>
 <br>
