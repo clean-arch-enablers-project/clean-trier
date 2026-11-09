@@ -10,7 +10,7 @@ This concept defines a common way to execute an action with explicit failure-han
 
 The **Trier** coordinates four decisions: whether to retry the action, whether to execute a fallback, how to represent retry exhaustion, and how to map unexpected exceptions.
 
-For example, a remote call might be retried after a timeout, replaced by a cache lookup if recovery fails, or reported through a mapped exception when no acceptable result can be obtained.
+For example, a remote call might be retried after a timeout, replaced by a cache lookup if recovery fails, or reported through a [mapped exception](https://github.com/clean-arch-enablers-project/clean-mapped-exceptions/blob/feature/hello-world/concept/README.md) when no acceptable result can be obtained.
 
 <br>
 
@@ -52,9 +52,9 @@ When it succeeds, the Trier returns its result or simply completes. When it thro
 
 Mapping gives a failure its semantic meaning within the workflow. It produces an exception for the caller to handle.
 
-A **mapped exception** already carries that meaning. If no recovery applies, the Trier propagates it unchanged.
+A **[mapped exception](https://github.com/clean-arch-enablers-project/clean-mapped-exceptions/blob/feature/hello-world/concept/README.md)** already carries that meaning. If no recovery applies, the Trier propagates it unchanged.
 
-An **unexpected exception** has not been mapped. If no recovery applies, the Trier passes it to a handler that produces an appropriate mapped exception, preserving the original cause.
+An **unexpected exception** has not been mapped. If no recovery applies, the Trier passes it to a handler that produces an appropriate [mapped exception](https://github.com/clean-arch-enablers-project/clean-mapped-exceptions/blob/feature/hello-world/concept/README.md), preserving the original cause.
 
 Here, unexpected means unmapped. A foreseeable technical failure, such as a timeout, may still require mapping.
 
@@ -80,7 +80,7 @@ Each invocation has its own retry accounting. Repeating the action must also be 
 
 Exhaustion is the outcome of a retry policy permitting no further attempts after a failure.
 
-An exhaustion handler receives the triggering exception and retry context, and produces a mapped exception describing that outcome. It defines how exhaustion is reported; it does not recover a result.
+An exhaustion handler receives the triggering exception and retry context, and produces a [mapped exception](https://github.com/clean-arch-enablers-project/clean-mapped-exceptions/blob/feature/hello-world/concept/README.md) describing that outcome. It defines how exhaustion is reported; it does not recover a result.
 
 If a fallback is configured, it is attempted before exhaustion is reported. Without a fallback, the Trier uses the custom exhaustion handler or a default mapped exhaustion exception.
 
@@ -107,7 +107,7 @@ The handling sequence is:
 1. Execute the original action. Return on success.
 2. On failure, retry if a matching policy permits another attempt.
 3. When no retry remains or applies, execute the fallback if configured. Return on success; report a mapped fallback failure if it fails.
-4. Without a fallback, report exhaustion if a retry policy was exhausted. Otherwise, propagate an already mapped exception or map an unexpected one.
+4. Without a fallback, report exhaustion if a retry policy was exhausted. Otherwise, propagate an already [mapped exception](https://github.com/clean-arch-enablers-project/clean-mapped-exceptions/blob/feature/hello-world/concept/README.md) or map an unexpected one.
 
 Retries and fallback are optional. Exception mapping remains useful on its own to define how failures leave the execution boundary.
 
