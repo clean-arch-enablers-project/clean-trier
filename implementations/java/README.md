@@ -5,7 +5,7 @@ Clean Trier executes an action with explicit retry, fallback, exhaustion, and ex
 
 ## Build and dependency
 
-Use Java 25 and Maven 3.9 or newer. Both Clean libraries currently use development version `1.0.0-SNAPSHOT`; install Clean Mapped Exceptions locally before building Trier.
+Use Java 25 and Maven 3.9 or newer. Both Clean libraries currently use release candidate version `1.0.0-RC1`; install Clean Mapped Exceptions locally before building Trier.
 
 With both repositories checked out side by side:
 
@@ -14,19 +14,19 @@ mvn -B -ntp -f ../clean-mapped-exceptions/implementations/java/pom.xml clean ins
 mvn -B -ntp -f implementations/java/pom.xml clean verify
 ```
 
-These commands run from the Clean Trier repository root. CI checks out Clean Mapped Exceptions at commit `36a78f27abec14dbe1e0f1fd562ee24592a37ef9` and installs it before verifying Trier. Use that revision for the same dependency baseline.
+These commands run from the Clean Trier repository root. CI checks out Clean Mapped Exceptions at commit `4190462699f15bab3c6ecb36b8557d0ea676220b` and installs it before verifying Trier. Use that revision for the same dependency baseline.
 
-To consume the locally installed development artifact, run `mvn -f implementations/java/pom.xml install` and declare:
+To consume the locally installed release candidate, run `mvn -f implementations/java/pom.xml install` and declare:
 
 ```xml
 <dependency>
     <groupId>com.clean-arch-enablers</groupId>
     <artifactId>clean-trier</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.0.0-RC1</version>
 </dependency>
 ```
 
-No remote snapshot repository or published release is assumed.
+No published release is assumed; install the release candidate locally until it is published.
 
 ## Usage
 

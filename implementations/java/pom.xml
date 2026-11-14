@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.clean-arch-enablers</groupId>
     <artifactId>clean-trier</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.0.0-RC1</version>
     <name>Clean Trier</name>
     <description>Java implementation of the Clean Trier concept</description>
     <url>https://github.com/clean-arch-enablers-project/clean-trier</url>
@@ -33,7 +33,7 @@
         <dependency>
             <groupId>com.clean-arch-enablers</groupId>
             <artifactId>clean-mapped-exceptions</artifactId>
-            <version>1.0.0-SNAPSHOT</version>
+            <version>1.0.0-RC1</version>
         </dependency>
         <dependency>
             <groupId>org.junit.jupiter</groupId>

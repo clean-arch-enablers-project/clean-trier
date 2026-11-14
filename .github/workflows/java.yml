@@ -22,7 +22,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: clean-arch-enablers-project/clean-mapped-exceptions
-          ref: 36a78f27abec14dbe1e0f1fd562ee24592a37ef9
+          ref: 4190462699f15bab3c6ecb36b8557d0ea676220b
           path: .dependencies/clean-mapped-exceptions
           persist-credentials: false
       - uses: actions/setup-java@v4
@@ -33,7 +33,7 @@ jobs:
           cache-dependency-path: |
             implementations/java/pom.xml
             .dependencies/clean-mapped-exceptions/implementations/java/pom.xml
-      - name: Install the pinned development dependency
+      - name: Install the pinned release candidate dependency
         run: mvn -B -ntp -f .dependencies/clean-mapped-exceptions/implementations/java/pom.xml clean install
       - name: Verify warnings, tests, coverage, and documentation
         run: mvn -B -ntp -f implementations/java/pom.xml clean verify
