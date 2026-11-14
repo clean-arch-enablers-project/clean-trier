@@ -74,6 +74,16 @@ Three retries allow up to four attempts: the initial execution and three additio
 
 Each Trier invocation tracks its own retry attempts. Repeating the action must also be acceptable for its possible side effects, including when an earlier attempt partially succeeded.
 
+Retry eligibility is evaluated against the failure thrown by the action, before an unmapped failure is translated by the unexpected-exception handler. A mapped exception can also be retried when its type matches a retry policy. Being mapped describes the failure's meaning; the retry policy determines whether another attempt is appropriate.
+
+<br>
+
+#### Retry Observations
+
+A **retry subscriber** is a callback registered to receive information about retry attempts. A retry notification identifies the triggering exception and the retry count reached for that execution.
+
+These notifications let application integrations report repeated attempts without placing reporting code inside the supplied action. Receiving a retry notification does not mean that the retry succeeded or that retry exhaustion has occurred; the action's result and the exhaustion handler report those outcomes separately.
+
 <br>
 
 #### Exhaustion
@@ -132,6 +142,8 @@ flowchart TD
 ```
 
 The Trier's retry, fallback, exhaustion, and exception-mapping semantics are intended to be reusable across workflows, programming languages, and application frameworks.
+
+The separate [Clean Autofeatures](https://github.com/clean-arch-enablers-project/clean-autofeatures/blob/feature/hello-world/concept/README.md) concept uses this execution mechanism for **autoretry**: declarations on use cases and ports select the retry policies. Direct Trier callers supply the executable behavior and policies themselves; declarative workflows obtain that composition through their setup.
 
 <br>
 <br>
