@@ -27,6 +27,8 @@ The workflow does not configure GitHub Secrets or change repository protection s
 
 ## Publication sequence
 
+Verification and publishing each use a fresh Maven repository without restoring a Maven cache. Workflows check out only their own repository and never install dependencies from source. Maven must resolve dependencies from their configured published repositories; an unpublished or unavailable dependency fails the build.
+
 1. Test the release-decision script and determine whether publication is needed.
 2. Set up Java 25 and Maven server configuration.
 3. Run `clean verify` with a fresh, isolated Maven repository. This checks unit tests, full coverage, compiler warnings, and Javadoc.

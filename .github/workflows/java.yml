@@ -30,10 +30,11 @@ jobs:
         with:
           distribution: temurin
           java-version: "25"
-          cache: maven
-          cache-dependency-path: implementations/java/pom.xml
       - name: Verify warnings, tests, coverage, and documentation
-        run: mvn -B -ntp -f implementations/java/pom.xml clean verify
+        run: >-
+          mvn -B -ntp -f implementations/java/pom.xml
+          "-Dmaven.repo.local=$RUNNER_TEMP/verification-maven-repository"
+          clean verify
       - name: Upload test and coverage reports
         if: always()
         uses: actions/upload-artifact@v4
