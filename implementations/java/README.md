@@ -136,6 +136,8 @@ Use `new RetryNotification(cause, count)` for notifications and `new OnExhaustio
 
 ## Verification
 
+Automatic Maven Central publishing on `main` is described in the [publishing guide](../../.github/PUBLISHING.md), including required GitHub Secrets and release ordering.
+
 From this Java directory, after installing the dependency:
 
 ```shell

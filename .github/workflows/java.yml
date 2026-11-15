@@ -5,10 +5,14 @@ on:
     paths:
       - "implementations/java/**"
       - ".github/workflows/java.yml"
+      - ".github/workflows/publish-java.yml"
+      - ".github/scripts/**"
   pull_request:
     paths:
       - "implementations/java/**"
       - ".github/workflows/java.yml"
+      - ".github/workflows/publish-java.yml"
+      - ".github/scripts/**"
   workflow_dispatch:
 
 permissions:
@@ -19,6 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Test release decisions
+        working-directory: .
+        run: python3 -W error -m unittest discover -s .github/scripts -p 'test_*.py'
       - uses: actions/checkout@v4
         with:
           repository: clean-arch-enablers-project/clean-mapped-exceptions
