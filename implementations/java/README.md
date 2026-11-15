@@ -5,16 +5,15 @@ Clean Trier executes an action with explicit retry, fallback, exhaustion, and ex
 
 ## Build and dependency
 
-Use Java 25 and Maven 3.9 or newer. Both Clean libraries currently use release candidate version `1.0.0-RC1`; install Clean Mapped Exceptions locally before building Trier.
+Use Java 25 and Maven 3.9 or newer. Trier uses release candidate version `1.0.0-RC1` and resolves Clean Mapped Exceptions `1.0.0-RC1` from Maven Central.
 
-With both repositories checked out side by side:
+From the Clean Trier repository root:
 
 ```shell
-mvn -B -ntp -f ../clean-mapped-exceptions/implementations/java/pom.xml clean install
 mvn -B -ntp -f implementations/java/pom.xml clean verify
 ```
 
-These commands run from the Clean Trier repository root. CI checks out Clean Mapped Exceptions at commit `4190462699f15bab3c6ecb36b8557d0ea676220b` and installs it before verifying Trier. Use that revision for the same dependency baseline.
+Both verification and publishing workflows use the published dependency. A separate Clean Mapped Exceptions checkout is not required.
 
 To consume the locally installed release candidate, run `mvn -f implementations/java/pom.xml install` and declare:
 
@@ -138,7 +137,7 @@ Use `new RetryNotification(cause, count)` for notifications and `new OnExhaustio
 
 Automatic Maven Central publishing on `main` is described in the [publishing guide](../../.github/PUBLISHING.md), including required GitHub Secrets and release ordering.
 
-From this Java directory, after installing the dependency:
+From this Java directory:
 
 ```shell
 mvn -B -ntp clean verify

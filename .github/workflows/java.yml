@@ -26,22 +26,12 @@ jobs:
       - name: Test release decisions
         working-directory: .
         run: python3 -W error -m unittest discover -s .github/scripts -p 'test_*.py'
-      - uses: actions/checkout@v4
-        with:
-          repository: clean-arch-enablers-project/clean-mapped-exceptions
-          ref: 4190462699f15bab3c6ecb36b8557d0ea676220b
-          path: .dependencies/clean-mapped-exceptions
-          persist-credentials: false
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "25"
           cache: maven
-          cache-dependency-path: |
-            implementations/java/pom.xml
-            .dependencies/clean-mapped-exceptions/implementations/java/pom.xml
-      - name: Install the pinned release candidate dependency
-        run: mvn -B -ntp -f .dependencies/clean-mapped-exceptions/implementations/java/pom.xml clean install
+          cache-dependency-path: implementations/java/pom.xml
       - name: Verify warnings, tests, coverage, and documentation
         run: mvn -B -ntp -f implementations/java/pom.xml clean verify
       - name: Upload test and coverage reports
