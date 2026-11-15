@@ -1,6 +1,6 @@
 # Publishing the Java artifact
 
-The [publishing workflow](workflows/publish-java.yml) runs after pushes to `main`, including merged pull requests. Pull requests and feature branches only run verification; they cannot publish through this workflow.
+The [publishing workflow](workflows/publish-java.yml) runs after pushes to `main`, including merged pull requests. Java verification runs on pull requests targeting `main`. [Feature branch automation](FEATURE_PRS.md) creates those pull requests after feature branch pushes. Publication requires a run on `main`.
 
 On a push, the workflow compares the Java POM's group, artifact, and version with the pre-push commit. A new Java implementation or changed coordinates are release candidates. Unchanged coordinates skip publication, so ordinary code or documentation merges do not attempt to overwrite an existing version. Maintain the Java version deliberately in the release PR.
 

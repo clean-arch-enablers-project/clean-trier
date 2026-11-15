@@ -1,12 +1,8 @@
 name: Java verification
 
 on:
-  push:
-    paths:
-      - "implementations/java/**"
-      - ".github/workflows/**"
-      - ".github/scripts/**"
   pull_request:
+    branches: [main]
     paths:
       - "implementations/java/**"
       - ".github/workflows/**"
