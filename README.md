@@ -29,4 +29,10 @@ Checked items have implementation code in this repository. Unchecked items are r
 - [ ] [Go](implementations/go/) — Placeholder; implementation not yet available.
 - [ ] [Python](implementations/python/) — Placeholder; implementation not yet available.
 
+## Repository automation
+
+[Feature pull request automation](.github/FEATURE_PRS.md) opens a pull request to `main` when a `feature/*` branch receives commits. The guide describes the required repository permission and how existing pull requests are handled.
+
+[Java publishing](.github/PUBLISHING.md) describes verification, signing, and Maven Central publication after release version changes reach `main`, including credential setup and dependency requirements.
+
 Licensed under [Apache License 2.0](LICENSE).

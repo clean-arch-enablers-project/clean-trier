@@ -35,7 +35,7 @@ Verification and publishing each use a fresh Maven repository without restoring 
 4. Activate the Maven `release` profile, sign the verified JAR, sources, Javadoc and POM, and deploy with Sonatype's Central Publishing Maven plugin.
 5. Wait for Central to report the deployment as published.
 
-The publishing job has no Maven cache or source checkout for dependencies. In particular, **publish Clean Mapped Exceptions before Clean Trier**. Trier must resolve its declared dependency from Central, proving that consumers can obtain it. Clean Mapped Exceptions `1.0.0-RC1` is now published; the ordinary Trier verification workflow also resolves that published dependency.
+Both verification and publishing resolve dependencies from Maven Central. The `clean-trier` artifact depends on `clean-mapped-exceptions`; publish the required Mapped Exceptions version before publishing Trier. Missing or unavailable dependency versions fail verification.
 
 The deploy step skips running unit tests a second time after successful verification. It retains the verification results and coverage data; signing and publication cannot run when verification fails. Test and coverage reports are uploaded even on failure. Deployment credentials are supplied only to the signing/publishing step.
 

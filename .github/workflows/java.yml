@@ -4,14 +4,12 @@ on:
   push:
     paths:
       - "implementations/java/**"
-      - ".github/workflows/java.yml"
-      - ".github/workflows/publish-java.yml"
+      - ".github/workflows/**"
       - ".github/scripts/**"
   pull_request:
     paths:
       - "implementations/java/**"
-      - ".github/workflows/java.yml"
-      - ".github/workflows/publish-java.yml"
+      - ".github/workflows/**"
       - ".github/scripts/**"
   workflow_dispatch:
 
