@@ -1,3 +1,9 @@
+<p align="center">CAE Java Version</p>
+
+---
+
+<br>
+
 # Clean Trier for Java
 
 Java 25 LTS implementation of the [Clean Trier concept](../../concept/README.md).
@@ -154,3 +160,10 @@ mvn -B -ntp clean verify sonar:sonar
 ```
 
 The scanner imports JaCoCo's XML report and waits for the configured server quality gate.
+
+<br>
+<br>
+
+---
+
+<p align="center">clean software, made easy.</p>

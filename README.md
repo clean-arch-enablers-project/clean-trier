@@ -1,3 +1,9 @@
+<p align="center">CAE Artifact</p>
+
+---
+
+<br>
+
 # Clean Trier
 
 An execution mechanism with explicit retry, fallback, retry-exhaustion, and exception-mapping rules.
@@ -36,3 +42,10 @@ Checked items have implementation code in this repository. Unchecked items are r
 [Java publishing](.github/PUBLISHING.md) describes verification, signing, and Maven Central publication after release version changes reach `main`, including credential setup and dependency requirements.
 
 Licensed under [Apache License 2.0](LICENSE).
+
+<br>
+<br>
+
+---
+
+<p align="center">clean software, made easy.</p>
