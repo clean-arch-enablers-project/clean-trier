@@ -1,9 +1,18 @@
-# Clean Trier for Java
+<p align="center">CAE Java Version</p>
+
+---
+
+<br>
+
+### Clean Trier for Java
 
 Java 25 LTS implementation of the [Clean Trier concept](../../concept/README.md).
+
 Clean Trier executes an action with explicit retry, fallback, exhaustion, and exception-mapping rules. Its only runtime dependency is [Clean Mapped Exceptions](https://github.com/clean-arch-enablers-project/clean-mapped-exceptions).
 
-## Build and dependency
+<br>
+
+#### Build and dependency
 
 Use Java 25 and Maven 3.9 or newer. Trier uses release candidate version `1.0.0-RC1` and resolves Clean Mapped Exceptions `1.0.0-RC1` from Maven Central.
 
@@ -27,7 +36,9 @@ To consume the locally installed release candidate, run `mvn -f implementations/
 
 No published release is assumed; install the release candidate locally until it is published.
 
-## Usage
+<br>
+
+#### Usage
 
 ```java
 import com.cae.clean_trier.Trier;
@@ -57,7 +68,9 @@ Use an explicit interface cast when a lambda or method reference is ambiguous be
 
 `build()` finishes configuration with default exception mapping. `onUnexpectedExceptions(handler)` installs a custom mapper and also builds, preserving the original builder style.
 
-## Execution contract
+<br>
+
+#### Execution contract
 
 1. Execute the original action and return its result on success.
 2. Select a matching retry policy before mapping the failure. A policy for a superclass applies to its subclasses; the most specific matching type wins.
@@ -67,7 +80,9 @@ Use an explicit interface cast when a lambda or method reference is ambiguous be
 
 JVM `Error` instances propagate without retry or mapping, including errors from the fallback. Interruption during a retry delay restores the thread's interrupted flag and immediately throws an `InternalMappedException` whose cause is the `InterruptedException`; the triggering action failure is suppressed. It does not start fallback or another attempt.
 
-### Retry policies
+<br>
+
+##### Retry policies
 
 `retryOn(type, maxRetries, baseTime, timeUnit)` creates an immutable `RetryPolicy`. Alternatively pass `RetryPolicy.of(...)` to `retryOn(type, policy)`.
 
@@ -79,13 +94,17 @@ Counters are local to each invocation and each selected policy. Different except
 
 Built Trier instances snapshot their builder's configuration. Later builder changes do not change earlier instances. Configuration can be shared between concurrent invocations; supplied actions, inputs, fallbacks, and callbacks must support their intended concurrency. Builders themselves are mutable and are not intended for concurrent mutation.
 
-### Retry observations
+<br>
+
+##### Retry observations
 
 `subscribe(RetrySubscriber)` registers an observer on that Trier configuration. Observers run synchronously in registration order immediately before a permitted retry's delay. Notifications retain the exact triggering exception and the invocation's cumulative one-based retry count, across all policies.
 
 No notification is sent for the initial attempt, successful completion, or exhaustion without another retry. Callback exceptions propagate unchanged and stop execution. Applications can delegate reporting to their own executors; Trier creates no global notification pool or shutdown hook.
 
-### Fallback
+<br>
+
+##### Fallback
 
 `fallback(Function<I, O>)` receives the same input as the original action and supplies an acceptable replacement result. For suppliers or runnables, use an ignored parameter; void fallbacks return null:
 
@@ -101,7 +120,9 @@ Trier.of(runnable)
 
 Fallback runs once and is not retried by the original action's policies. Success bypasses both exhaustion and unexpected-exception handlers. Failure produces `FallbackFailureMappedException`: its cause is the fallback failure, `getTriggeringException()` retains the original action failure, and the latter is also suppressed for standard Java diagnostic tooling.
 
-### Exhaustion and exception mapping
+<br>
+
+##### Exhaustion and exception mapping
 
 The default exhaustion outcome is `NoRetriesLeftException`, an `InternalMappedException`. Its `getFailureStatus()` provides the final action exception, cumulative retry count, and exhausted policy.
 
@@ -111,7 +132,9 @@ The default unexpected-exception mapper creates an `InternalMappedException` wit
 
 Exception classes do not declare explicit `serialVersionUID` fields. Java generates their serialization identifiers; stable serialization across releases is not promised.
 
-## Migration from CAE Trier
+<br>
+
+#### Migration from CAE Trier
 
 | Old | New |
 | --- | --- |
@@ -133,7 +156,9 @@ The four `Trier.of(...)` shapes and terminal `onUnexpectedExceptions(...)` build
 
 Use `new RetryNotification(cause, count)` for notifications and `new OnExhaustion.FailureStatus(cause, count, policy)` for exhaustion context. Those immutable records retain the legacy getters used by handlers and observers, alongside their record accessors. The action adapter classes, mutable trackers, global notifier, and its pool provider are no longer public APIs. This artifact is not a binary-compatible replacement.
 
-## Verification
+<br>
+
+#### Verification
 
 Automatic Maven Central publishing on `main` is described in the [publishing guide](../../.github/PUBLISHING.md), including required GitHub Secrets and release ordering.
 
@@ -154,3 +179,10 @@ mvn -B -ntp clean verify sonar:sonar
 ```
 
 The scanner imports JaCoCo's XML report and waits for the configured server quality gate.
+
+<br>
+<br>
+
+---
+
+<p align="center">clean software, made easy.</p>
