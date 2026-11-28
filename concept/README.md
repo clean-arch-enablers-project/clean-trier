@@ -56,6 +56,8 @@ A **[mapped exception](https://github.com/clean-arch-enablers-project/clean-mapp
 
 An **unexpected exception** has not been mapped. If no recovery applies, the Trier passes it to a handler that produces an appropriate [mapped exception](https://github.com/clean-arch-enablers-project/clean-mapped-exceptions/blob/feature/hello-world/concept/README.md), preserving the original cause.
 
+Each Trier requires the calling application to supply this handler. The application can describe the action that failed and choose a failure category that fits its workflow.
+
 Here, unexpected means unmapped. A foreseeable technical failure, such as a timeout, may still require mapping.
 
 <br>
@@ -81,6 +83,8 @@ Retry eligibility is evaluated against the failure thrown by the action, before 
 #### Retry Observations
 
 A **retry subscriber** is a callback registered to receive information about retry attempts. A retry notification identifies the triggering exception and the retry count reached for that execution.
+
+The application registers subscribers globally. They observe retries across Trier instances, including instances created before registration.
 
 These notifications let application integrations report repeated attempts without placing reporting code inside the supplied action. Receiving a retry notification does not mean that the retry succeeded or that retry exhaustion has occurred; the action's result and the exhaustion handler report those outcomes separately.
 
