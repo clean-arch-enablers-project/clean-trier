@@ -6,12 +6,9 @@ import com.cae.clean_trier.retry.NoRetriesLeftException;
 import com.cae.clean_trier.retry.OnExhaustion;
 import com.cae.clean_trier.retry.RetryNotification;
 import com.cae.clean_trier.retry.RetryPolicy;
-import com.cae.clean_trier.retry.RetrySubscriber;
 
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
@@ -28,8 +25,10 @@ import java.util.function.Supplier;
 @SuppressWarnings("overloads")
 public final class Trier<I, O> {
     private final TrierBuilder<I, O> configuration;
+    private final UnexpectedExceptionHandler unexpectedExceptionHandler;
 
-    private Trier(TrierBuilder<I, O> builder) {
+    private Trier(TrierBuilder<I, O> builder, UnexpectedExceptionHandler unexpectedExceptionHandler) {
+        this.unexpectedExceptionHandler = Objects.requireNonNull(unexpectedExceptionHandler, "handler");
         configuration = new TrierBuilder<>(builder);
     }
 
@@ -125,10 +124,7 @@ public final class Trier<I, O> {
     }
 
     private void waitForRetry(Exception failure, int totalRetries, int retryNumber, RetryPolicy policy) {
-        var notification = new RetryNotification(failure, totalRetries);
-        for (var subscriber : configuration.subscribers) {
-            subscriber.receiveRetryNotification(notification);
-        }
+        RetryNotifier.SINGLETON.notifySubscribers(new RetryNotification(failure, totalRetries));
         try {
             policy.timeUnit().sleep(policy.delayForRetry(retryNumber));
         } catch (InterruptedException interruption) {
@@ -153,7 +149,7 @@ public final class Trier<I, O> {
         if (failure instanceof MappedException mapped) {
             throw mapped;
         }
-        throw preserveFailure(configuration.unexpectedExceptionHandler.handle(failure), failure);
+        throw preserveFailure(unexpectedExceptionHandler.handle(failure), failure);
     }
 
     private static MappedException preserveFailure(MappedException mapped, Exception original) {
@@ -173,10 +169,7 @@ public final class Trier<I, O> {
         private final Function<I, O> action;
         private final I input;
         private final Map<Class<? extends Exception>, RetryPolicy> retryPolicies;
-        private final List<RetrySubscriber> subscribers;
         private Function<I, O> fallback;
-        private UnexpectedExceptionHandler unexpectedExceptionHandler =
-                problem -> new InternalMappedException("Action could not be completed", problem);
         private OnExhaustion onExhaustion =
                 status -> new NoRetriesLeftException("No retries left", status);
 
@@ -184,16 +177,13 @@ public final class Trier<I, O> {
             this.action = action;
             this.input = input;
             retryPolicies = new LinkedHashMap<>();
-            subscribers = new ArrayList<>();
         }
 
         private TrierBuilder(TrierBuilder<I, O> builder) {
             action = builder.action;
             input = builder.input;
             retryPolicies = new LinkedHashMap<>(builder.retryPolicies);
-            subscribers = List.copyOf(builder.subscribers);
             fallback = builder.fallback;
-            unexpectedExceptionHandler = builder.unexpectedExceptionHandler;
             onExhaustion = builder.onExhaustion;
         }
 
@@ -234,17 +224,6 @@ public final class Trier<I, O> {
         }
 
         /**
-         * Registers an invocation-local synchronous retry observer.
-         * Observer failures propagate unchanged and stop execution.
-         * @param subscriber the non-null observer
-         * @return this builder
-         */
-        public TrierBuilder<I, O> subscribe(RetrySubscriber subscriber) {
-            subscribers.add(Objects.requireNonNull(subscriber, "subscriber"));
-            return this;
-        }
-
-        /**
          * Sets a handler that returns the mapped exhaustion failure.
          * @param handler the non-null exhaustion mapper
          * @return this builder
@@ -255,21 +234,12 @@ public final class Trier<I, O> {
         }
 
         /**
-         * Sets an unexpected-failure mapper and builds a configuration snapshot.
+         * Builds a configuration snapshot with the required unexpected-failure mapper.
          * @param handler the non-null failure mapper
          * @return an executable Trier
          */
         public Trier<I, O> onUnexpectedExceptions(UnexpectedExceptionHandler handler) {
-            unexpectedExceptionHandler = Objects.requireNonNull(handler, "handler");
-            return build();
-        }
-
-        /**
-         * Builds a configuration snapshot with default mapping for unspecified handlers.
-         * @return an executable Trier
-         */
-        public Trier<I, O> build() {
-            return new Trier<>(this);
+            return new Trier<>(this, handler);
         }
     }
 }

@@ -6,179 +6,253 @@
 
 ### Clean Trier for Java
 
-Java 25 LTS implementation of the [Clean Trier concept](../../concept/README.md).
+Use Clean Trier on Java 25 to execute a Java action with retry, fallback, and mapped failure handling.
 
-Clean Trier executes an action with explicit retry, fallback, exhaustion, and exception-mapping rules. Its only runtime dependency is [Clean Mapped Exceptions](https://github.com/clean-arch-enablers-project/clean-mapped-exceptions).
+Maven automatically adds Clean Mapped Exceptions as a transitive dependency when your application declares this artifact.
 
 <br>
 
-#### Build and dependency
+#### Add to your Java application
 
-Use Java 25 and Maven 3.9 or newer. Trier uses release candidate version `1.0.0-RC1` and resolves Clean Mapped Exceptions `1.0.0-RC1` from Maven Central.
-
-From the Clean Trier repository root:
-
-```shell
-mvn -B -ntp -f implementations/java/pom.xml clean verify
-```
-
-Both verification and publishing workflows use the published dependency. A separate Clean Mapped Exceptions checkout is not required.
-
-To consume the locally installed release candidate, run `mvn -f implementations/java/pom.xml install` and declare:
+To use this artifact in a Java application, add the following dependency to the `<dependencies>` section of your application's `pom.xml`.
 
 ```xml
 <dependency>
     <groupId>com.clean-arch-enablers</groupId>
     <artifactId>clean-trier</artifactId>
-    <version>1.0.0-RC1</version>
+    <version>1.0.0-RC2</version>
 </dependency>
 ```
 
-No published release is assumed; install the release candidate locally until it is published.
+<br>
+
+#### Fluent examples
+
+These examples follow the concept's [execution order](../../concept/README.md#execution-order).
+
+##### Configure and run an action
+
+Register retry observers once during application setup. For each action, chain the options you need and finish by supplying the required unexpected-exception handler. This lookup retries and falls back to a cached value.
+
+```java
+import com.cae.clean_mapped_exceptions.specifics.InternalMappedException;
+import com.cae.clean_trier.RetryNotifier;
+import com.cae.clean_trier.Trier;
+import com.cae.clean_trier.retry.RetryPolicy;
+import com.cae.clean_trier.retry.RetrySubscriber;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
+import java.util.function.Function;
+import java.util.function.Supplier;
+
+var notifier = RetryNotifier.SINGLETON;
+RetrySubscriber observer = event -> System.out.println(
+        "Retry " + event.totalOfRetriesAtThisPoint() + ": " + event.cause().getClass().getSimpleName());
+notifier.subscribe(observer); // application setup
+
+Function<String, String> remoteLookup = id -> {
+    throw new IllegalStateException("Customer service unavailable");
+};
+var cache = Map.of("42", "cached customer");
+
+String customer = Trier.of(remoteLookup, "42")
+        .retryOn(IllegalStateException.class, RetryPolicy.of(2, 10, TimeUnit.MILLISECONDS))
+        .retryOn(NumberFormatException.class, 0, 0, TimeUnit.MILLISECONDS)
+        .fallback(cache::get)
+        .onUnexpectedExceptions(cause -> new InternalMappedException("Customer lookup failed", cause))
+        .execute();
+
+Trier.of((Consumer<String>) System.out::println, customer)
+        .onUnexpectedExceptions(cause -> new InternalMappedException("Could not print customer", cause))
+        .execute();
+
+String status = Trier.of((Supplier<String>) () -> "ready")
+        .onUnexpectedExceptions(cause -> new InternalMappedException("Could not read service status", cause))
+        .execute();
+
+Trier.of((Runnable) () -> System.out.println("done"))
+        .onUnexpectedExceptions(cause -> new InternalMappedException("Could not signal completion", cause))
+        .execute();
+
+notifier.unsubscribe(observer); // when the application no longer needs the observer
+```
 
 <br>
 
-#### Usage
+##### Choose how failures leave the action
+
+Use `onExhaustion` to describe a failure after retries run out. The required `onUnexpectedExceptions` handler describes an unmapped failure without a matching retry policy or a fallback.
 
 ```java
-import com.cae.clean_trier.Trier;
+import com.cae.clean_mapped_exceptions.MappedException;
 import com.cae.clean_mapped_exceptions.specifics.InternalMappedException;
+import com.cae.clean_trier.FallbackFailureMappedException;
+import com.cae.clean_trier.Trier;
+import com.cae.clean_trier.retry.NoRetriesLeftException;
+import java.util.concurrent.TimeUnit;
+
+Runnable refresh = () -> { throw new IllegalStateException("Inventory service unavailable"); };
+
+try {
+    Trier.of(refresh)
+            .retryOn(IllegalStateException.class, 2, 0, TimeUnit.MILLISECONDS)
+            .onExhaustion(status -> new NoRetriesLeftException("Inventory refresh retries exhausted", status))
+            .onUnexpectedExceptions(cause -> new InternalMappedException("Inventory refresh failed", cause))
+            .execute();
+} catch (NoRetriesLeftException failure) {
+    var status = failure.getFailureStatus();
+    Exception original = status.exception();
+    int retries = status.totalOfRetries();
+    var exhaustedPolicy = status.retryPolicy();
+}
+
+try {
+    Trier.of(refresh)
+            .onUnexpectedExceptions(cause -> new InternalMappedException("Inventory refresh failed", cause))
+            .execute();
+} catch (MappedException failure) {
+    String message = failure.getBriefPublicMessage();
+    Throwable original = failure.getCause();
+}
+
+try {
+    Trier.of(refresh)
+            .fallback(ignored -> { throw new IllegalStateException("Inventory cache unavailable"); })
+            .onUnexpectedExceptions(cause -> new InternalMappedException("Inventory refresh failed", cause))
+            .execute();
+} catch (FallbackFailureMappedException failure) {
+    Exception actionFailure = failure.getTriggeringException();
+    Throwable recoveryFailure = failure.getCause();
+}
+```
+
+<br>
+
+##### Configure a Trier with every option
+
+This example registers a global observer, then creates one Trier with two retry policies, a fallback, an exhaustion handler, and the required unexpected-exception handler.
+
+```java
+import com.cae.clean_mapped_exceptions.specifics.InternalMappedException;
+import com.cae.clean_trier.RetryNotifier;
+import com.cae.clean_trier.Trier;
+import com.cae.clean_trier.retry.NoRetriesLeftException;
+import com.cae.clean_trier.retry.RetryPolicy;
+import com.cae.clean_trier.retry.RetrySubscriber;
+import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Function;
 
-var customer = Trier.of((Function<String, Customer>) repository::load, customerId)
-        .retryOn(IllegalStateException.class, 3, 100, TimeUnit.MILLISECONDS)
-        .subscribe(notification -> logger.info("Retry {}", notification.getTotalOfRetriesAtThisPoint()))
-        .fallback(cache::load)
-        .onUnexpectedExceptions(original ->
-                new InternalMappedException("Customer could not be loaded", original))
-        .execute();
+var notifier = RetryNotifier.SINGLETON;
+RetrySubscriber observer = event -> System.out.println("Inventory retry " + event.totalOfRetriesAtThisPoint());
+notifier.subscribe(observer);
+
+try {
+    Function<String, Integer> fetchStock = sku -> {
+        throw new IllegalStateException("Inventory service unavailable");
+    };
+    var cachedStock = Map.of("SKU-42", 12);
+
+    int available = Trier.of(fetchStock, "SKU-42")
+            .retryOn(IllegalStateException.class, RetryPolicy.of(2, 10, TimeUnit.MILLISECONDS))
+            .retryOn(NumberFormatException.class, 0, 0, TimeUnit.MILLISECONDS)
+            .fallback(cachedStock::get)
+            .onExhaustion(status -> new NoRetriesLeftException("Inventory lookup retries exhausted", status))
+            .onUnexpectedExceptions(cause -> new InternalMappedException("Inventory lookup failed", cause))
+            .execute(); // 12, from the cache after two retries
+} finally {
+    notifier.unsubscribe(observer);
+}
 ```
 
-The method references and domain types above are supplied by the application. Actions use Java's standard functional interfaces:
-
-```java
-Trier.of(function, input); // Function<I, O>
-Trier.of(consumer, input); // Consumer<I>
-Trier.of(supplier);        // Supplier<O>
-Trier.of(runnable);        // Runnable
-```
-
-Use an explicit interface cast when a lambda or method reference is ambiguous between overloads. Void actions return null. Inputs and successful results may be null. Standard Java functional interfaces do not declare checked exceptions; callers must adapt operations that throw them.
-
-`build()` finishes configuration with default exception mapping. `onUnexpectedExceptions(handler)` installs a custom mapper and also builds, preserving the original builder style.
+Fallback takes precedence after an unmatched failure or retry exhaustion. This run returns the cached result. A failing fallback produces `FallbackFailureMappedException`. The exhaustion and unexpected-exception handlers apply when executing without a fallback.
 
 <br>
 
-#### Execution contract
+#### Configure and execute an action
 
-1. Execute the original action and return its result on success.
-2. Select a matching retry policy before mapping the failure. A policy for a superclass applies to its subclasses; the most specific matching type wins.
-3. Retry while that policy permits another attempt, notifying subscribers and then waiting for the configured delay.
-4. When retries are exhausted or no policy applies, execute the fallback if configured.
-5. Without fallback, report matching-policy exhaustion; otherwise propagate an already mapped exception unchanged or map the unexpected exception.
+The four `of(...)` overloads capture the [action shapes](../../concept/README.md#action).
 
-JVM `Error` instances propagate without retry or mapping, including errors from the fallback. Interruption during a retry delay restores the thread's interrupted flag and immediately throws an `InternalMappedException` whose cause is the `InterruptedException`; the triggering action failure is suppressed. It does not start fallback or another attempt.
-
-<br>
-
-##### Retry policies
-
-`retryOn(type, maxRetries, baseTime, timeUnit)` creates an immutable `RetryPolicy`. Alternatively pass `RetryPolicy.of(...)` to `retryOn(type, policy)`.
-
-`maxRetries` counts additional attempts: three retries permit four executions. Zero retries is valid; a matching failure immediately exhausts the policy. Negative retry counts or delays, and null policy types, policies, or time units, are rejected.
-
-Delays are `baseTime × 2^(policyRetryNumber - 1)`. Overflow saturates at `Long.MAX_VALUE` in the configured unit. A zero delay remains zero. `RetryPolicy.delayForRetry(int)` accepts a positive, one-based retry number.
-
-Counters are local to each invocation and each selected policy. Different exception types using the same policy key share that policy's budget; different policy keys have separate budgets. Retrying another type does not reset previously consumed budgets. A second invocation starts fresh.
-
-Built Trier instances snapshot their builder's configuration. Later builder changes do not change earlier instances. Configuration can be shared between concurrent invocations; supplied actions, inputs, fallbacks, and callbacks must support their intended concurrency. Builders themselves are mutable and are not intended for concurrent mutation.
-
-<br>
-
-##### Retry observations
-
-`subscribe(RetrySubscriber)` registers an observer on that Trier configuration. Observers run synchronously in registration order immediately before a permitted retry's delay. Notifications retain the exact triggering exception and the invocation's cumulative one-based retry count, across all policies.
-
-No notification is sent for the initial attempt, successful completion, or exhaustion without another retry. Callback exceptions propagate unchanged and stop execution. Applications can delegate reporting to their own executors; Trier creates no global notification pool or shutdown hook.
-
-<br>
-
-##### Fallback
-
-`fallback(Function<I, O>)` receives the same input as the original action and supplies an acceptable replacement result. For suppliers or runnables, use an ignored parameter; void fallbacks return null:
-
-```java
-Trier.of(runnable)
-        .fallback(ignored -> {
-            recovery.run();
-            return null;
-        })
-        .build()
-        .execute();
-```
-
-Fallback runs once and is not retried by the original action's policies. Success bypasses both exhaustion and unexpected-exception handlers. Failure produces `FallbackFailureMappedException`: its cause is the fallback failure, `getTriggeringException()` retains the original action failure, and the latter is also suppressed for standard Java diagnostic tooling.
-
-<br>
-
-##### Exhaustion and exception mapping
-
-The default exhaustion outcome is `NoRetriesLeftException`, an `InternalMappedException`. Its `getFailureStatus()` provides the final action exception, cumulative retry count, and exhausted policy.
-
-`onExhaustion(status -> mappedException)` replaces that outcome. The handler returns a mapped exception; it does not recover a result. Use fallback for recovery.
-
-The default unexpected-exception mapper creates an `InternalMappedException` with the original failure as its cause. Custom mappers should also retain the original as the cause. If a returned exception omits it, Trier preserves it as a suppressed failure. Returning the triggering mapped exception itself preserves its identity. Handler results must be non-null; callback exceptions propagate unchanged.
-
-Exception classes do not declare explicit `serialVersionUID` fields. Java generates their serialization identifiers; stable serialization across releases is not promised.
-
-<br>
-
-#### Migration from CAE Trier
-
-| Old | New |
+| API on `com.cae.clean_trier.Trier` | Purpose |
 | --- | --- |
-| `com.clean-arch-enablers:cae-trier` | `com.clean-arch-enablers:clean-trier` |
-| `com.cae.trier` / `com.cae.trier.retry` | `com.cae.clean_trier` / `com.cae.clean_trier.retry` |
-| CAE Mapped Exceptions dependency | Clean Mapped Exceptions dependency |
-| Java 11 | Java 25 LTS |
-| Shared, mutable retry tracker | Invocation-local counters and immutable policies |
-| Exact exception class matching | Most specific matching superclass |
-| Recursive retry execution | Iterative execution |
-| `OnExhaustion.handle(...)` returns void | Returns the mapped exception to throw |
-| Missing exhaustion handler fails configuration at runtime | Default mapped exhaustion outcome |
-| `RetryNotifier.SINGLETON.subscribe(...)` | Builder-local `subscribe(...)` |
-| Global notification executor and shutdown hook | Synchronous callbacks; caller owns any executor |
-| Separate `Action` adapters and `RetryTracker` | Supplied callables adapted internally |
-| No Java fallback API | Builder `fallback(Function<I, O>)` |
+| `of(Function<I, O> action, I input)` | Configure an action that takes an input and produces a result, such as loading a customer by ID. |
+| `of(Consumer<I> action, I input)` | Configure an action that takes an input and performs a side effect, such as sending a supplied notification. |
+| `of(Supplier<O> action)` | Configure an action that produces a result without taking an input, such as reading the current service status. |
+| `of(Runnable action)` | Configure an action with no input or result, such as refreshing a cache. |
+| `TrierBuilder.onUnexpectedExceptions(UnexpectedExceptionHandler handler)` | Supply the required handler for unmapped failures and create a reusable Trier from the configured action and policies. |
+| `execute()` | Run the configured action with a fresh retry budget each time. Return the action's result or the fallback's result when recovery succeeds. |
 
-The four `Trier.of(...)` shapes and terminal `onUnexpectedExceptions(...)` builder method are retained. Replace imports and dependency coordinates, adapt exhaustion handlers to return a mapped exception, and recompile consumers.
+Typed functional interfaces disambiguate overloaded lambdas and method references. Void actions return `null`. Inputs and successful results may also be `null`. Adapt checked failures before passing an operation to a standard Java functional interface.
 
-Use `new RetryNotification(cause, count)` for notifications and `new OnExhaustion.FailureStatus(cause, count, policy)` for exhaustion context. Those immutable records retain the legacy getters used by handlers and observers, alongside their record accessors. The action adapter classes, mutable trackers, global notifier, and its pool provider are no longer public APIs. This artifact is not a binary-compatible replacement.
+Finish configuring the builder by calling `onUnexpectedExceptions(handler)` with a non-null handler. It snapshots the configuration and returns a Trier that can be reused across invocations, with a new retry budget each time. Use the builder from one thread at a time and ensure the supplied actions and callbacks can handle the concurrency of their callers.
 
 <br>
 
-#### Verification
+#### Retry and observe attempts
 
-Automatic Maven Central publishing on `main` is described in the [publishing guide](../../.github/PUBLISHING.md), including required GitHub Secrets and release ordering.
+The policies govern [when to retry](../../concept/README.md#retry). Subscribers receive [retry observations](../../concept/README.md#retry-observations).
 
-From this Java directory:
+| Builder API | Use |
+| --- | --- |
+| `retryOn(Class<? extends Exception> type, int maxRetries, long baseTime, TimeUnit unit)` | Set a retry policy from its parameters. |
+| `retryOn(Class<? extends Exception> type, RetryPolicy policy)` | Set a reusable retry policy. |
 
-```shell
-mvn -B -ntp clean verify
-```
+| Global observer API | Use |
+| --- | --- |
+| `com.cae.clean_trier.RetryNotifier.SINGLETON` | Access the retry notifier shared by all Trier instances. |
+| `RetryNotifier.subscribe(RetrySubscriber subscriber)` | Register an observer for all Trier instances. Returns whether a new registration was added. |
+| `RetryNotifier.unsubscribe(RetrySubscriber subscriber)` | Remove a registered observer. Returns whether a registration was removed. |
 
-Compilation enables `-Xlint:all,-serial` and fails on warnings. The targeted `overloads` suppression on Trier acknowledges the existing Function/Consumer API overloads. Javadoc also fails on warnings. JaCoCo requires zero missed instructions, branches, lines, methods, and complexity for each production class, without exclusions.
+| API in `com.cae.clean_trier.retry` | Use |
+| --- | --- |
+| `new RetryPolicy(int maxAmountOfRetries, long baseTime, TimeUnit timeUnit)` or `RetryPolicy.of(...)` | Create an immutable exponential-backoff policy. |
+| `RetryPolicy.maxAmountOfRetries()`, `baseTime()`, `timeUnit()` | Read the retry limit, first delay, and time unit. |
+| `RetryPolicy.delayForRetry(int retryNumber)` | Calculate the delay for a positive, one-based retry number in this policy. |
+| `RetrySubscriber.receiveRetryNotification(RetryNotification notification)` | Implement the callback invoked before each permitted retry delay. |
+| `new RetryNotification(Exception cause, int totalOfRetriesAtThisPoint)` | Construct a retry event, for example when testing an observer. |
+| `RetryNotification.cause()`, `totalOfRetriesAtThisPoint()` | Read the original action failure and cumulative retry count for the invocation. |
+| `RetryNotification.getCause()`, `getTotalOfRetriesAtThisPoint()` | Getter forms of the same accessors. |
 
-Reports are available under `target/surefire-reports/` and `target/site/jacoco/`.
+A retry is an additional attempt. Three retries allow up to four executions. The most specific matching exception class determines the policy, and each policy key has its own budget within the invocation. The delay doubles after each retry and saturates at `Long.MAX_VALUE` in the configured unit. Zero retries exhausts a matching policy immediately. Zero delay is allowed.
 
-Set `SONAR_HOST_URL` and `SONAR_TOKEN` for your SonarQube instance, then run:
+Subscribers observe retries from every Trier, including instances created before registration. Each notification uses the subscriber list at the start of delivery. Subscribers run synchronously in registration order before the delay and may be called concurrently by separate Trier invocations. A subscriber failure propagates and stops the current execution.
 
-```shell
-mvn -B -ntp clean verify sonar:sonar
-```
+An interrupted retry delay restores the interrupt flag and raises an `InternalMappedException` with the interruption as its cause and the triggering action failure suppressed.
 
-The scanner imports JaCoCo's XML report and waits for the configured server quality gate.
+<br>
+
+#### Recover with a fallback
+
+The recovery function implements [fallback](../../concept/README.md#fallback).
+
+| API | Use |
+| --- | --- |
+| `TrierBuilder.fallback(Function<I, O> recovery)` | Run recovery once after an unmatched failure or exhaustion. The recovery function receives the original input. |
+| `new FallbackFailureMappedException(Exception fallbackException, Exception triggeringException)` | Represent a failed recovery while retaining both failures. |
+| `FallbackFailureMappedException.getTriggeringException()` | Retrieve the original action failure. Java's `getCause()` returns the recovery failure. |
+
+For an action without input, ignore the fallback parameter. For a void action, return `null` from the fallback. A completed fallback supplies the final result. If recovery fails, the triggering failure is also available through `getSuppressed()`.
+
+<br>
+
+#### Map exhaustion and unexpected failures
+
+The two handlers implement [retry exhaustion](../../concept/README.md#exhaustion) and [unexpected exception mapping](../../concept/README.md#exception-mapping).
+
+| API | Use |
+| --- | --- |
+| `TrierBuilder.onExhaustion(OnExhaustion handler)` | Choose the mapped exception thrown on exhaustion when there is no fallback. |
+| `OnExhaustion.handle(FailureStatus status)` | Implement the callback that maps an exhausted invocation. |
+| `new OnExhaustion.FailureStatus(Exception exception, int totalOfRetries, RetryPolicy retryPolicy)` | Create the terminal retry record, for example when testing a handler. |
+| `FailureStatus.exception()`, `totalOfRetries()`, `retryPolicy()` | Read the final action failure, invocation-wide retry count, and exhausted policy. |
+| `FailureStatus.getException()`, `getTotalOfRetries()` | Getter forms for the failure and retry count. |
+| `new NoRetriesLeftException(String briefPublicMessage, OnExhaustion.FailureStatus status)` | Create an exhaustion exception with the terminal action failure as its cause. |
+| `NoRetriesLeftException.getFailureStatus()` | Read the terminal retry record. |
+| `TrierBuilder.onUnexpectedExceptions(UnexpectedExceptionHandler handler)` | Create the Trier with the required mapper for unmapped failures that reach the mapping step. |
+| `UnexpectedExceptionHandler.handle(Exception failure)` | Implement the unexpected-failure mapping callback. |
+
+The default exhaustion handler throws `NoRetriesLeftException`. For an unmatched failure with no fallback, Trier propagates an already mapped exception unchanged or applies the application's unexpected-failure handler. Use the handler to describe the action that failed and select the mapped exception category that fits the workflow. It must return a non-null mapped exception. If it omits the original cause, Trier attaches the original as a suppressed failure unless the handler returns that failure itself. JVM errors propagate directly.
 
 <br>
 <br>

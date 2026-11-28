@@ -7,7 +7,10 @@ import com.cae.clean_trier.retry.NoRetriesLeftException;
 import com.cae.clean_trier.retry.OnExhaustion;
 import com.cae.clean_trier.retry.RetryNotification;
 import com.cae.clean_trier.retry.RetryPolicy;
+import com.cae.clean_trier.retry.RetrySubscriber;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.parallel.Isolated;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
@@ -27,15 +30,26 @@ import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+@Isolated
 class TrierTest {
+    private static final UnexpectedExceptionHandler MAP_FAILURE =
+            cause -> new InternalMappedException("Test action failed", cause);
+
+    private final List<RetrySubscriber> subscriptions = new ArrayList<>();
+
+    @AfterEach
+    void removeRetrySubscriptions() {
+        subscriptions.forEach(RetryNotifier.SINGLETON::unsubscribe);
+    }
+
     @Test
     void executesAllFourActionShapesAndRetainsNullResults() {
         var received = new ArrayList<String>();
         var ran = new AtomicInteger();
-        var function = Trier.of((Function<String, Integer>) String::length, "hello").build();
-        var consumer = Trier.of((Consumer<String>) received::add, "input").build();
-        var supplier = Trier.of((Supplier<String>) () -> "result").build();
-        var runnable = Trier.of((Runnable) ran::incrementAndGet).build();
+        var function = Trier.of((Function<String, Integer>) String::length, "hello").onUnexpectedExceptions(MAP_FAILURE);
+        var consumer = Trier.of((Consumer<String>) received::add, "input").onUnexpectedExceptions(MAP_FAILURE);
+        var supplier = Trier.of((Supplier<String>) () -> "result").onUnexpectedExceptions(MAP_FAILURE);
+        var runnable = Trier.of((Runnable) ran::incrementAndGet).onUnexpectedExceptions(MAP_FAILURE);
         assertAll(
                 () -> assertEquals(5, function.execute()),
                 () -> assertNull(consumer.execute()),
@@ -43,18 +57,19 @@ class TrierTest {
                 () -> assertEquals("result", supplier.execute()),
                 () -> assertNull(runnable.execute()),
                 () -> assertEquals(1, ran.get()),
-                () -> assertNull(Trier.of((Supplier<String>) () -> null).build().execute()),
-                () -> assertNull(Trier.of((Function<String, String>) value -> value, null).build().execute()));
+                () -> assertNull(Trier.of((Supplier<String>) () -> null).onUnexpectedExceptions(MAP_FAILURE).execute()),
+                () -> assertNull(Trier.of((Function<String, String>) value -> value, null)
+                        .onUnexpectedExceptions(MAP_FAILURE).execute()));
     }
 
     @Test
-    void mapsUnexpectedFailuresAndRetainsOriginalCauseByDefault() {
+    void mapsUnexpectedFailuresWithTheExplicitHandler() {
         var cause = new IllegalArgumentException("Technical");
-        var trier = failing(cause).build();
+        var trier = failing(cause).onUnexpectedExceptions(MAP_FAILURE);
         var failure = assertThrows(InternalMappedException.class, trier::execute);
         assertAll(
                 () -> assertSame(cause, failure.getCause()),
-                () -> assertEquals("Action could not be completed", failure.getBriefPublicMessage()),
+                () -> assertEquals("Test action failed", failure.getBriefPublicMessage()),
                 () -> assertEquals(0, failure.getSuppressed().length));
     }
 
@@ -98,7 +113,7 @@ class TrierTest {
     void customExhaustionCanPropagateSameMappedFailure() {
         var original = new InputMappedException("Unavailable");
         var trier = failing(original).retryOn(InputMappedException.class, 0, 0, TimeUnit.SECONDS)
-                .onExhaustion(status -> original).build();
+                .onExhaustion(status -> original).onUnexpectedExceptions(MAP_FAILURE);
         assertSame(original, assertThrows(InputMappedException.class, trier::execute));
         assertEquals(0, original.getSuppressed().length);
     }
@@ -111,7 +126,7 @@ class TrierTest {
         var trier = Trier.of((Runnable) () -> {
             attempts.incrementAndGet();
             throw original;
-        }).retryOn(IllegalStateException.class, maxRetries, 0, TimeUnit.SECONDS).build();
+        }).retryOn(IllegalStateException.class, maxRetries, 0, TimeUnit.SECONDS).onUnexpectedExceptions(MAP_FAILURE);
         for (int invocation = 1; invocation <= 2; invocation++) {
             var failure = assertThrows(NoRetriesLeftException.class, trier::execute);
             assertAll(
@@ -126,6 +141,7 @@ class TrierTest {
     void retriesMappedFailuresAndReturnsSuccessfulResult() {
         var attempts = new AtomicInteger();
         var notifications = new ArrayList<RetryNotification>();
+        subscribe(notifications::add);
         var original = new InputMappedException("Transient input");
         var trier = Trier.of((Supplier<String>) () -> {
             if (attempts.incrementAndGet() < 3) {
@@ -133,7 +149,7 @@ class TrierTest {
             }
             return "ready";
         }).retryOn(InputMappedException.class, 3, 0, TimeUnit.SECONDS)
-                .subscribe(notifications::add).build();
+                .onUnexpectedExceptions(MAP_FAILURE);
         assertAll(
                 () -> assertEquals("ready", trier.execute()),
                 () -> assertEquals(3, attempts.get()),
@@ -146,6 +162,7 @@ class TrierTest {
     @ValueSource(booleans = {true, false})
     void mostSpecificPolicyWinsIndependentlyOfRegistrationOrder(boolean broadFirst) {
         var notifications = new ArrayList<RetryNotification>();
+        subscribe(notifications::add);
         var builder = failing(new IllegalArgumentException("Failure"));
         if (broadFirst) {
             builder.retryOn(RuntimeException.class, 0, 0, TimeUnit.SECONDS)
@@ -155,7 +172,7 @@ class TrierTest {
                     .retryOn(RuntimeException.class, 0, 0, TimeUnit.SECONDS);
         }
         var trier = builder.retryOn(IllegalStateException.class, 5, 0, TimeUnit.SECONDS)
-                .subscribe(notifications::add).build();
+                .onUnexpectedExceptions(MAP_FAILURE);
         var failure = assertThrows(NoRetriesLeftException.class, trier::execute);
         assertAll(
                 () -> assertEquals(2, failure.getFailureStatus().totalOfRetries()),
@@ -169,7 +186,7 @@ class TrierTest {
                 .onExhaustion(status -> {
                     fail("No applicable policy");
                     return null;
-                }).build();
+                }).onUnexpectedExceptions(MAP_FAILURE);
         var failure = assertThrows(InternalMappedException.class, trier::execute);
         assertAll(
                 () -> assertFalse(failure instanceof NoRetriesLeftException),
@@ -180,6 +197,7 @@ class TrierTest {
     void alternatingFailureTypesHaveIndependentPolicyBudgetsAndGlobalNotifications() {
         var attempts = new AtomicInteger();
         var observed = new ArrayList<RetryNotification>();
+        subscribe(observed::add);
         var lastFailure = new IllegalStateException("State");
         var trier = Trier.of((Runnable) () -> {
             if (attempts.incrementAndGet() % 2 == 1) {
@@ -188,7 +206,7 @@ class TrierTest {
             throw new IllegalArgumentException("Argument");
         }).retryOn(IllegalStateException.class, 1, 0, TimeUnit.SECONDS)
                 .retryOn(IllegalArgumentException.class, 1, 0, TimeUnit.SECONDS)
-                .subscribe(observed::add).build();
+                .onUnexpectedExceptions(MAP_FAILURE);
         var failure = assertThrows(NoRetriesLeftException.class, trier::execute);
         assertAll(
                 () -> assertEquals(3, attempts.get()),
@@ -199,24 +217,33 @@ class TrierTest {
     }
 
     @Test
-    void snapshotsPoliciesObserversAndHandlersWhenBuilt() {
+    void snapshotsPoliciesAndExhaustionHandlersWhenBuilt() {
         var attempts = new AtomicInteger();
-        var observed = new ArrayList<RetryNotification>();
         var builder = Trier.of((Runnable) () -> {
             attempts.incrementAndGet();
             throw new IllegalStateException("Dependency");
         }).retryOn(IllegalStateException.class, 1, 0, TimeUnit.SECONDS);
-        var first = builder.build();
+        var first = builder.onUnexpectedExceptions(MAP_FAILURE);
         var replacement = new InputMappedException("Replacement");
-        builder.retryOn(IllegalStateException.class, 0, 0, TimeUnit.SECONDS)
-                .subscribe(observed::add).onExhaustion(status -> replacement)
+        var second = builder.retryOn(IllegalStateException.class, 0, 0, TimeUnit.SECONDS)
+                .onExhaustion(status -> replacement)
                 .onUnexpectedExceptions(problem -> replacement);
-        var second = builder.build();
         assertThrows(NoRetriesLeftException.class, first::execute);
         assertSame(replacement, assertThrows(InputMappedException.class, second::execute));
-        assertAll(
-                () -> assertEquals(3, attempts.get()),
-                () -> assertTrue(observed.isEmpty()));
+        assertEquals(3, attempts.get());
+    }
+
+    @Test
+    void reusingABuilderKeepsEachTriersExplicitHandler() {
+        var original = new IllegalStateException("Original");
+        var builder = failing(original);
+        var firstFailure = new InternalMappedException("First operation failed", original);
+        var secondFailure = new InternalMappedException("Second operation failed", original);
+        var first = builder.onUnexpectedExceptions(cause -> firstFailure);
+        var second = builder.onUnexpectedExceptions(cause -> secondFailure);
+
+        assertSame(firstFailure, assertThrows(InternalMappedException.class, first::execute));
+        assertSame(secondFailure, assertThrows(InternalMappedException.class, second::execute));
     }
 
     @Test
@@ -225,7 +252,7 @@ class TrierTest {
         var trier = Trier.of((Runnable) () -> {
             attempts.incrementAndGet();
             throw new IllegalStateException("Transient");
-        }).retryOn(RuntimeException.class, 2, 0, TimeUnit.SECONDS).build();
+        }).retryOn(RuntimeException.class, 2, 0, TimeUnit.SECONDS).onUnexpectedExceptions(MAP_FAILURE);
         try (var executor = Executors.newFixedThreadPool(4)) {
             var tasks = new ArrayList<Callable<Integer>>();
             for (int index = 0; index < 24; index++) {
@@ -265,7 +292,7 @@ class TrierTest {
                 .fallback(ignored -> "cached").onExhaustion(status -> {
                     fail("Fallback succeeded");
                     return null;
-                }).build();
+                }).onUnexpectedExceptions(MAP_FAILURE);
         assertAll(
                 () -> assertEquals("cached", trier.execute()),
                 () -> assertEquals(3, attempts.get()));
@@ -274,15 +301,16 @@ class TrierTest {
     @Test
     void fallbackRecoversMappedFailuresAndCanReturnNull() {
         var trier = failing(new InputMappedException("Missing"))
-                .fallback(ignored -> null).build();
+                .fallback(ignored -> null).onUnexpectedExceptions(MAP_FAILURE);
         assertNull(trier.execute());
     }
 
     @Test
     void successfulActionDoesNotExecuteFallbackOrObservers() {
+        subscribe(note -> fail("Action succeeded"));
         var trier = Trier.of((Supplier<String>) () -> "original")
                 .fallback(ignored -> fail("Action succeeded"))
-                .subscribe(note -> fail("Action succeeded")).build();
+                .onUnexpectedExceptions(MAP_FAILURE);
         assertEquals("original", trier.execute());
     }
 
@@ -295,7 +323,7 @@ class TrierTest {
                 .fallback(ignored -> {
                     attempts.incrementAndGet();
                     throw fallback;
-                }).build();
+                }).onUnexpectedExceptions(MAP_FAILURE);
         var failure = assertThrows(FallbackFailureMappedException.class, trier::execute);
         assertAll(
                 () -> assertSame(fallback, failure.getCause()),
@@ -307,7 +335,7 @@ class TrierTest {
     @Test
     void fallbackCanRethrowOriginalWithoutLosingIt() {
         var original = new IllegalStateException("Original");
-        var trier = failing(original).fallback(ignored -> { throw original; }).build();
+        var trier = failing(original).fallback(ignored -> { throw original; }).onUnexpectedExceptions(MAP_FAILURE);
         var failure = assertThrows(FallbackFailureMappedException.class, trier::execute);
         assertAll(
                 () -> assertSame(original, failure.getCause()),
@@ -318,7 +346,7 @@ class TrierTest {
     void interruptionRestoresFlagAndStopsRecovery() {
         var original = new IllegalStateException("Original");
         var trier = failing(original).retryOn(IllegalStateException.class, 1, 1, TimeUnit.DAYS)
-                .fallback(ignored -> fail("Interruption must stop execution")).build();
+                .fallback(ignored -> fail("Interruption must stop execution")).onUnexpectedExceptions(MAP_FAILURE);
         try {
             Thread.currentThread().interrupt();
             var failure = assertThrows(InternalMappedException.class, trier::execute);
@@ -336,22 +364,23 @@ class TrierTest {
         var fatal = new AssertionError("Fatal");
         var action = Trier.of((Runnable) () -> { throw fatal; })
                 .retryOn(Exception.class, 3, 0, TimeUnit.SECONDS)
-                .fallback(ignored -> fail("Errors must propagate")).build();
+                .fallback(ignored -> fail("Errors must propagate")).onUnexpectedExceptions(MAP_FAILURE);
         assertSame(fatal, assertThrows(AssertionError.class, action::execute));
         var fallback = failing(new IllegalStateException("Original"))
-                .fallback(ignored -> { throw fatal; }).build();
+                .fallback(ignored -> { throw fatal; }).onUnexpectedExceptions(MAP_FAILURE);
         assertSame(fatal, assertThrows(AssertionError.class, fallback::execute));
     }
 
     @Test
     void subscriberFailuresPropagateWithoutRetryingOrMapping() {
         var callbackFailure = new IllegalArgumentException("Subscriber");
+        subscribe(note -> { throw callbackFailure; });
         var attempts = new AtomicInteger();
         var trier = Trier.of((Runnable) () -> {
             attempts.incrementAndGet();
             throw new IllegalStateException("Original");
         }).retryOn(Exception.class, 2, 0, TimeUnit.SECONDS)
-                .subscribe(note -> { throw callbackFailure; }).build();
+                .onUnexpectedExceptions(MAP_FAILURE);
         assertSame(callbackFailure, assertThrows(IllegalArgumentException.class, trier::execute));
         assertEquals(1, attempts.get());
     }
@@ -359,12 +388,36 @@ class TrierTest {
     @Test
     void notifiesEverySubscriberInRegistrationOrder() {
         var observed = new ArrayList<String>();
+        subscribe(note -> observed.add("first"));
+        subscribe(note -> observed.add("second"));
         var trier = failing(new IllegalStateException("Original"))
                 .retryOn(Exception.class, 1, 0, TimeUnit.SECONDS)
-                .subscribe(note -> observed.add("first"))
-                .subscribe(note -> observed.add("second")).build();
+                .onUnexpectedExceptions(MAP_FAILURE);
         assertThrows(NoRetriesLeftException.class, trier::execute);
         assertEquals(List.of("first", "second"), observed);
+    }
+
+    @Test
+    void globalSubscriptionsApplyToExistingTriersUntilRemoved() {
+        var firstFailure = new IllegalStateException("First");
+        var secondFailure = new IllegalStateException("Second");
+        var first = failing(firstFailure).retryOn(Exception.class, 1, 0, TimeUnit.SECONDS)
+                .onUnexpectedExceptions(MAP_FAILURE);
+        var second = failing(secondFailure).retryOn(Exception.class, 1, 0, TimeUnit.SECONDS)
+                .onUnexpectedExceptions(MAP_FAILURE);
+
+        var observed = new ArrayList<Exception>();
+        RetrySubscriber subscriber = notification -> observed.add(notification.cause());
+        subscribe(subscriber);
+        var notifier = RetryNotifier.SINGLETON;
+        assertFalse(notifier.subscribe(subscriber));
+        assertThrows(NoRetriesLeftException.class, first::execute);
+        assertThrows(NoRetriesLeftException.class, second::execute);
+
+        assertTrue(notifier.unsubscribe(subscriber));
+        assertFalse(notifier.unsubscribe(subscriber));
+        assertThrows(NoRetriesLeftException.class, first::execute);
+        assertEquals(List.of(firstFailure, secondFailure), observed);
     }
 
     @Test
@@ -379,7 +432,8 @@ class TrierTest {
                 () -> assertThrows(NullPointerException.class, () -> builder.retryOn(null, policy)),
                 () -> assertThrows(NullPointerException.class, () -> builder.retryOn(Exception.class, null)),
                 () -> assertThrows(NullPointerException.class, () -> builder.fallback(null)),
-                () -> assertThrows(NullPointerException.class, () -> builder.subscribe(null)),
+                () -> assertThrows(NullPointerException.class, () -> RetryNotifier.SINGLETON.subscribe(null)),
+                () -> assertThrows(NullPointerException.class, () -> RetryNotifier.SINGLETON.unsubscribe(null)),
                 () -> assertThrows(NullPointerException.class, () -> builder.onExhaustion(null)),
                 () -> assertThrows(NullPointerException.class, () -> builder.onUnexpectedExceptions(null)));
     }
@@ -389,11 +443,11 @@ class TrierTest {
         var cause = new IllegalStateException("Original");
         var nullMapper = failing(cause).onUnexpectedExceptions(problem -> null);
         var nullExhaustion = failing(cause).retryOn(Exception.class, 0, 0, TimeUnit.SECONDS)
-                .onExhaustion(status -> null).build();
+                .onExhaustion(status -> null).onUnexpectedExceptions(MAP_FAILURE);
         var callbackFailure = new IllegalArgumentException("Mapper");
         var throwingMapper = failing(cause).onUnexpectedExceptions(problem -> { throw callbackFailure; });
         var throwingExhaustion = failing(cause).retryOn(Exception.class, 0, 0, TimeUnit.SECONDS)
-                .onExhaustion(status -> { throw callbackFailure; }).build();
+                .onExhaustion(status -> { throw callbackFailure; }).onUnexpectedExceptions(MAP_FAILURE);
         assertAll(
                 () -> assertThrows(NullPointerException.class, nullMapper::execute),
                 () -> assertThrows(NullPointerException.class, nullExhaustion::execute),
@@ -426,6 +480,11 @@ class TrierTest {
                 () -> assertThrows(NullPointerException.class, () -> new NoRetriesLeftException("Exhausted", null)),
                 () -> assertThrows(NullPointerException.class, () -> new FallbackFailureMappedException(null, cause)),
                 () -> assertThrows(NullPointerException.class, () -> new FallbackFailureMappedException(cause, null)));
+    }
+
+    private void subscribe(RetrySubscriber subscriber) {
+        assertTrue(RetryNotifier.SINGLETON.subscribe(subscriber));
+        subscriptions.add(subscriber);
     }
 
     private static Trier.TrierBuilder<Void, Void> failing(RuntimeException cause) {

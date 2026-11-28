@@ -5,7 +5,7 @@
     <modelVersion>4.0.0</modelVersion>
     <groupId>com.clean-arch-enablers</groupId>
     <artifactId>clean-trier</artifactId>
-    <version>1.0.0-RC1</version>
+    <version>1.0.0-RC2</version>
     <name>Clean Trier</name>
     <description>Java implementation of the Clean Trier concept</description>
     <url>https://github.com/clean-arch-enablers-project/clean-trier</url>
